@@ -2,7 +2,14 @@ require "test/unit"
 
 module YellowTokens
   def eat; [6,4,4,4,4,3,3,3,3,2,2,2,2,1,1,1,1,0,0][yellow]; end
-  def cost; [nil,7,7,7,7,5,5,5,5,4,4,4,4,3,3,3,3,2,2][yellow]; end
+  def cost(unit)
+    case unit
+    when :worker
+      [99,7,7,7,7,5,5,5,5,4,4,4,4,3,3,3,3,2,2][yellow]
+    when :infantry,:farmer,:miner then 2
+    when :labo,:religion then 3
+    end
+  end
   def happy; [8,7,7,6,6,5,5,4,4,3,3,2,2,2,2,1,1,0,0][yellow]; end
 end
 
@@ -13,7 +20,7 @@ end
 class State < Struct.new(:infantry,:farmer,:food,:miner,:stone,:labo,:science,:religion,:worker,:blue,:yellow)
   include YellowTokens
   include BlueTokens
-  attr_accessor :prev_state,:turn
+  attr_accessor :prev_state,:turn,:action
 
   def initialize(prev_state=nil)
     if prev_state.kind_of? State
@@ -24,11 +31,13 @@ class State < Struct.new(:infantry,:farmer,:food,:miner,:stone,:labo,:science,:r
       super(1,2,0,2,0,1,0,0,1,16,18)
       @turn = 1
     end
+    @action = ""
   end
 
   def growth
     self.turn += 1
     self.science += labo
+    self.action = ""
     x = rotten
     if stone >= x
       move(:stone,:blue,x)
@@ -65,119 +74,64 @@ class State < Struct.new(:infantry,:farmer,:food,:miner,:stone,:labo,:science,:r
       [:yellow,"黄"]
     ].map do |attr,label|
       sprintf("%s:%2d ",label,send(attr))
-    end.join(" ")
+    end.join(" ") + action
   end
 
   def dump
     if prev_state
       prev_state.dump
+    else
+      puts "-" * 103
     end
     puts to_s
   end
 
-  def each_worker
-    loop do
-      break unless create_worker
-    end
-    yield clone
-  end
-
-  def create_worker
-    if cost && food >= cost
-      move(:food,:blue,cost)
-      move(:yellow,:worker,1)
-    else
-      false
-    end
-  end
-
-  def each_farmer
-    loop do
+  def each(unit)
+    case unit
+    when :worker
+      while create(unit)
+        self.action += "+#{unit}"
+      end
       yield clone
-      break unless create_farmer
-    end
-  end
-
-  def create_farmer
-    if stone >= 2 && worker > 0
-      move(:stone,:blue,2)
-      move(:worker,:farmer,1)
     else
-      false
+      loop do
+        yield clone
+        break unless create(unit)
+        self.action += "+#{unit}"
+      end
     end
   end
 
-  def each_miner
-    loop do
-      yield clone
-      break unless create_miner
-    end
-  end
+  def create(unit)
+    case unit
+    when :worker
+      if cost(:worker) <= food
+        move(:food,:blue,cost(unit))
+        move(:yellow,:worker,1)
+      else
+        false
+      end
 
-  def create_miner
-    if stone >= 2 && worker > 0
-      move(:stone,:blue,2)
-      move(:worker,:miner,1)
     else
-      false
-    end
-  end
-
-  def each_religion
-    loop do
-      yield clone
-      break unless create_religion
-    end
-  end
-
-  def create_religion
-    if stone >= 3 && worker > 0
-      move(:stone,:blue,3)
-      move(:worker,:religion,1)
-    else
-      false
-    end
-  end
-
-  def each_infantry
-    loop do
-      yield clone
-      break unless create_infantry
-    end
-  end
-
-  def create_infantry
-    if stone >= 2 && worker > 0
-      move(:stone,:blue,2)
-      move(:worker,:infantry,1)
-    else
-      false
-    end
-  end
-
-  def each_science
-    loop do
-      yield clone
-      break unless create_science
-    end
-  end
-
-  def create_science
-    if stone >= 3 && worker > 0
-      move(:stone,:blue,3)
-      move(:worker,:labo,1)
-    else
-      false
+      if stone >= cost(unit) && worker > 0
+        move(:stone,:blue,cost(unit))
+        move(:worker,unit,1)
+      else
+        false
+      end
     end
   end
 
   def each_candidate
-    each_worker do |state|
-      state.each_farmer do |state|
-        state.each_miner do |state|
-          state.each_science do |state|
-            state.each_infantry do |state|
-              state.each_religion do |state|
+    state = clone.tap do |obj|
+      obj.growth
+    end
+    state.each(:worker) do |state|
+      state.each(:farmer) do |state|
+        state.each(:miner) do |state|
+          state.each(:labo) do |state|
+            state.each(:infantry) do |state|
+              state.each(:religion) do |state|
                 if state.satisfy?
                   state.prev_state = self
                   yield state
@@ -200,31 +154,28 @@ class BFS
   def initialize(state)
     @queue = []
     @visited = []
+    @anser = []
     @queue << state
     @visited << state
   end
 
   def search
-    loop do
-      if @queue.empty?
-        puts "not found."
-        return
-      else
-        state = @queue.shift
+    while @anser.empty?
+      break if @queue.empty?
+
+      state = @queue.shift
+      state.each_candidate do |state|
+        next if @visited.include? state
         if yield state
-          puts "found."
-          state.dump
-          return
+          @anser << state
         else
-          state.growth
-          state.each_candidate do |state|
-            unless @visited.include? state
-              @visited << state
-              @queue << state
-            end
-          end
+          @visited << state
+          @queue << state
         end
       end
+    end
+    @anser.each do |anser|
+      anser.dump
     end
   end
 end
@@ -232,10 +183,8 @@ end
 state = State.new
 bfs = BFS.new(state)
 bfs.search do |state|
-  state.science == 12 && state.infantry == 3
+  state.yellow < 12
 end
-
-
 
 
 
