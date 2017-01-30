@@ -17,10 +17,10 @@ module BlueTokens
   def rotten; [6,4,4,4,4,4,2,2,2,2,2,0,0,0,0,0,0][blue]; end
 end
 
-class State < Struct.new(:infantry,:farmer,:food,:miner,:stone,:labo,:science,:religion,:worker,:blue,:yellow)
+class State < Struct.new(:infantry,:farmer,:food,:miner,:stone,:labo,:religion,:worker,:blue,:yellow)
   include YellowTokens
   include BlueTokens
-  attr_accessor :prev_state,:turn,:action
+  attr_accessor :prev_state,:turn,:action,:science
 
   def initialize(prev_state=nil)
     if prev_state.kind_of? State
@@ -28,10 +28,11 @@ class State < Struct.new(:infantry,:farmer,:food,:miner,:stone,:labo,:science,:r
       @prev_state = prev_state
       @turn = prev_state.turn
     else
-      super(1,2,0,2,0,1,0,0,1,16,18)
+      super(1,2,0,2,0,1,0,1,16,18)
       @turn = 1
     end
     @action = ""
+    @science = 0
   end
 
   def growth
@@ -148,6 +149,10 @@ class State < Struct.new(:infantry,:farmer,:food,:miner,:stone,:labo,:science,:r
     happy <= worker + religion
   end
 
+  def prefer
+    infantry + farmer + miner + labo
+  end
+
 end
 
 class BFS
@@ -167,9 +172,10 @@ class BFS
 
       state = @queue.first
       if @turn < state.turn
-        @queue.sort_by!{|o|- (o.labo + o.farmer/3 - o.worker/3)}
+        @queue.sort_by!{|o|-o.prefer}
         @queue = @queue.take(100)
         puts "turn:#{@turn} count:#{@count}"
+        puts state
         STDOUT.flush
         @turn = state.turn
         @count = 0
@@ -197,7 +203,10 @@ end
 state = State.new
 bfs = BFS.new(state)
 bfs.search do |state|
-  state.labo == 9
+  state.infantry == 3 &&
+  state.farmer == 3 &&
+  state.miner == 3 &&
+  state.labo == 3
 end
 
 
