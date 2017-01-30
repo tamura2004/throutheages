@@ -157,11 +157,24 @@ class BFS
     @anser = []
     @queue << state
     @visited << state
+    @turn = 0
+    @count = 0
   end
 
   def search
     while @anser.empty?
       break if @queue.empty?
+
+      state = @queue.first
+      if @turn < state.turn
+        @queue.sort_by!{|o|- (o.labo + o.farmer/3 - o.worker/3)}
+        @queue = @queue.take(100)
+        puts "turn:#{@turn} count:#{@count}"
+        STDOUT.flush
+        @turn = state.turn
+        @count = 0
+      end
+      @count += 1
 
       state = @queue.shift
       state.each_candidate do |state|
@@ -174,6 +187,7 @@ class BFS
         end
       end
     end
+
     @anser.each do |anser|
       anser.dump
     end
@@ -183,7 +197,7 @@ end
 state = State.new
 bfs = BFS.new(state)
 bfs.search do |state|
-  state.yellow < 12
+  state.labo == 9
 end
 
 
